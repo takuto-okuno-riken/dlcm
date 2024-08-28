@@ -7,10 +7,12 @@
 %  nodeControl  node control matrix (node x node) (optional)
 %  exControl    exogenous input control matrix for each node (node x exogenous input) (optional)
 %  isFullNode   return both node & exogenous causality matrix (optional)
+%  lambda       ridge regression constant param (default:0)
 %  usegpu       use gpu calculation (default:false)
 
-function PC = calcPartialCorrelation_(X, exSignal, nodeControl, exControl, isFullNode, usegpu)
-    if nargin < 6, usegpu = false; end
+function PC = calcPartialCorrelation_(X, exSignal, nodeControl, exControl, isFullNode, lambda, usegpu)
+    if nargin < 7, usegpu = false; end
+    if nargin < 6, lambda = 0; end
     if nargin < 5, isFullNode = 0; end
     if nargin < 4, exControl = []; end
     if nargin < 3, nodeControl = []; end
@@ -31,7 +33,8 @@ function PC = calcPartialCorrelation_(X, exSignal, nodeControl, exControl, isFul
     % using matrix inversion
     PC = nan(nodeMax,nodeMax,class(X));
     C = cov(Y',1);
-    P = invQR(C); % get precision matrix
+    a = sqrt(mean(diag(C).^2)); C = C / a; % normalize
+    P = invQR(C + lambda*eye(size(C,1))); % get precision matrix
     P2 = calcP2(P, nodeMax);
     if ~isreal(P2) % complex and totally useless. use pinv instead
         P = pinv(C);

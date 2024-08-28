@@ -14,14 +14,60 @@ z = X(3:nodeNum,:).';
 pc1 = PC(1,2);
 pc2 = partialcorr(x,y,z);
 % regression version (original definition)
-[b1,bint1,r1] = regress(x,[z, ones(sigLen,1)]);
-[b2,bint2,r2] = regress(y,[z, ones(sigLen,1)]);
+z1 = [z, ones(sigLen,1)];
+[b1,bint1,r1] = regress(x,z1);
+[b2,bint2,r2] = regress(y,z1);
 pc3 = (r1.'*r2) / (sqrt(r1.'*r1)*sqrt(r2.'*r2));
 pc4 = corr(r1,r2);
 % invert of cov matrix version
 sigma = cov(X.',1);
+%a = sqrt(mean(diag(sigma).^2)); sigma = sigma / a; % normalize
 B = inv(sigma);
 pc5 = -B(1,2) / sqrt(B(1,1)*B(2,2));
+
+% redge regression version
+sigma = cov(X.',1);
+lambda = 0.01;
+B = inv(sigma + lambda*eye(size(sigma,1)));
+pc6 = -B(1,2) / sqrt(B(1,1)*B(2,2));
+%grot=-B;
+%grot=(grot ./ repmat(sqrt(abs(diag(grot))),1,8)) ./ repmat(sqrt(abs(diag(grot)))',8,1);
+
+k = 100;
+B1 = ridge(x,z, k, 0);
+r1 = x - (B1(1)+z*B1(2:end));
+B2 = ridge(y,z, k, 0);
+r2 = y - (B2(1)+z*B2(2:end));
+pc7 = corr(r1,r2);
+
+% redge regression (MATLAB compatible) version
+[n,p] = size(z);
+mz = mean(z);
+stdx = std(z,0,1);
+MX = mz(ones(n,1),:);
+STDX = stdx(ones(n,1),:);
+Z = (z - MX) ./ STDX;
+
+zr = [Z; sqrt(k) * eye(size(Z,2))];
+xr = [x; zeros(size(Z,2),1)];
+yr = [y; zeros(size(Z,2),1)];
+b1 = zr \ xr;
+b1 = b1 ./ repmat(stdx',1,1);
+r1 = x - (mean(x)-mz*b1 + z*b1);
+b2 = zr \ yr;
+b2 = b2 ./ repmat(stdx',1,1);
+r2 = y - (mean(y)-mz*b2 + z*b2);
+pc8 = corr(r1,r2);
+
+[Q, R, perm, RiQ] = regressPrepare(zr);
+b1(perm) = RiQ * xr;
+b1 = b1 ./ repmat(stdx',1,1);
+r1 = x - (mean(x)-mz*b1 + z*b1);
+b2(perm) = RiQ * yr;
+b2 = b2 ./ repmat(stdx',1,1);
+r2 = y - (mean(y)-mz*b2 + z*b2);
+pc9 = corr(r1,r2);
+
 
 %% cos similarity original vs. sin, v09, mFT
 %{
@@ -58,6 +104,16 @@ figure; clims = [-1 1]; imagesc(Z,clims); title(['PC - PC3b : sum err=' num2str(
 PC3c = calcPartialCrossCorrelation(X,[],[],[],2);
 Z = PC - PC3c(:,:,3);
 figure; clims = [-1 1]; imagesc(Z,clims); title(['PC - PC3c : sum err=' num2str(nansum(abs(Z),'all'))]);
+
+% redge regression invert version
+PC3d = calcPartialCorrelation_(X,[],[],[],[],0.1);
+Z = PC - PC3d;
+figure; clims = [-1 1]; imagesc(Z,clims); title(['PC - PC3d : sum err=' num2str(nansum(abs(Z),'all'))]);
+
+PC3e = calcPartialCrossCorrelation(X,[],[],[],2,0,200);
+Z = PC3d - PC3e(:,:,3);
+figure; clims = [-1 1]; imagesc(Z,clims); title(['PC3d - PC3e : sum err=' num2str(nansum(abs(Z),'all'))]);
+nansum(abs(PC - PC3e(:,:,3)),'all')
 
 PC4 = calcPLSPartialCorrelation(X); % calc PLS PC
 Z = PC - PC4;
